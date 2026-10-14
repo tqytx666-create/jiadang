@@ -121,6 +121,7 @@ const NOIDLE=['食品','药品护肤','证件文件','日用清洁'];
 const isIdle=it=>active(it)&&(it.status==='idle'||(!NOIDLE.includes(it.cat)&&idleDays(it)>=S.settings.idleDays));
 const latestSnap=z=>z.photos.length?z.photos.reduce((a,b)=>a.date>b.date?a:b):null;
 const snapAge=z=>{const s=latestSnap(z);return s?dayDiff(s.date,today()):null};
+const zonePhoto=zid=>{const z=zoneById(zid),sn=z&&latestSnap(z);return sn?sn.img:null};
 const snapStale=z=>{const a=snapAge(z);return a==null?false:a>=S.settings.snapDays};
 
 function flags(it){
@@ -211,6 +212,10 @@ const curLocVal=it=>it.zoneId?'z:'+it.zoneId:it.furnId?'f:'+it.furnId:it.roomId?
 
 /* ============ 视图切换 ============ */
 let VIEW='home',Q='',SEL=null,EDIT=false,tidy=null;
+let SELCELL=null;const openCells=new Set();
+const FACE_ROT={S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2};
+function faceOf(f){if(f.face)return f.face;const r=roomById(f.roomId);if(!r)return 'S';const dx=r.cx-f.x,dz=r.cz-f.z;return Math.abs(dx)>Math.abs(dz)?(dx>0?'E':'W'):(dz>0?'S':'N')}
+const CELLNAME={door:'柜门',drawer:'抽屉',open:'开放格',top:'台面'};
 function setView(v){
  VIEW=v;
  $$('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
@@ -300,6 +305,21 @@ function renderSide(){
  <div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(f.name)}</h2>${EDIT?`<span class="row"><button data-act="rotFurn" data-id="${f.id}">↻转90°</button><button data-act="editFurn" data-id="${f.id}">✏️ 改</button></span>`:''}</div>
  <div class="sec">${zs.length} 个区域 · ${its.length} 件单品</div>
  <div class="row"><button class="pri" data-act="addZone" data-furn="${f.id}">＋加区域（抽屉/层/箱子）</button><button data-act="addItem" data-loc="f:${f.id}">＋记一件</button></div>`;
+ if(f.cells&&f.cells.length){
+  const groups=new Map();f.cells.forEach((c,i)=>{const k=c.z||c.g||('i'+i);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(i)});
+  const nz=[...groups.keys()].filter(k=>!k.startsWith('i')||true).length;
+  h+=`<div class="sec" style="margin-top:8px">共 ${f.cells.length} 个${f.cells.some(c=>c.k==='drawer')?'门/抽屉':'门/格'}，分 ${nz} 组 · 点 3D 里的门或抽屉就能打开</div>`;
+ }
+ if(SELCELL&&SELCELL.fid===f.id&&f.cells&&f.cells[SELCELL.idx]){
+  const c=f.cells[SELCELL.idx],cz=c.z?zoneById(c.z):null,sn=cz&&latestSnap(cz),isOpen=openCells.has(f.id+':'+SELCELL.idx);
+  h+=`<div class="card" style="margin:10px 0;border-color:var(--pri)"><div class="sec">第 ${SELCELL.idx+1} 个${CELLNAME[c.k]||'格'}${isOpen?' · 已打开':' · 已关上'} <button data-act="toggleCellBtn" data-furn="${f.id}" data-idx="${SELCELL.idx}" style="padding:0 8px;margin-left:6px">${isOpen?'关上':'打开'}</button></div>`+
+   (cz?`${sn?`<img src="${sn.img}" data-act="lb" style="width:100%;border-radius:10px;margin:6px 0;cursor:zoom-in">`:'<div class="empty" style="padding:14px">这格还没有照片</div>'}
+    <div><b>${esc(cz.name)}</b></div><div class="m sec">${esc(cz.purpose||'')}</div>
+    <div>${cz.tags.slice(0,10).map(t=>`<span class="tag ok">${esc(t)}</span>`).join('')}</div>
+    <div class="sec">${sn?'照片 '+fmtAge(snapAge(cz)):'📷 还没拍照'}${cz.count?' · '+esc(cz.count):''}</div>
+    <div class="row" style="margin-top:6px"><button class="pri" data-act="openZone" data-id="${cz.id}">看详情 / 换照片</button></div>`
+   :`<div class="empty" style="padding:14px">这一格还没记里面有什么</div><div class="row"><button class="pri" data-act="addZoneCell" data-furn="${f.id}" data-idx="${SELCELL.idx}">📷 给这格建区域（拍照）</button></div>`)+`</div>`;
+ }
  h+='<h3>区域</h3>'+(zs.length?'<div style="display:grid;gap:8px">'+zs.map(z=>zoneCard(z,true)).join('')+'</div>':'<div class="empty">还没分区域。打开抽屉/柜门拍一张，就算一个区域</div>');
  if(loose.length)h+='<h3>没分区域的单品</h3><div style="display:grid;gap:8px">'+loose.map(itemCard).join('')+'</div>';
  el.innerHTML=h;
@@ -515,7 +535,7 @@ function collectItem(){
 function zoneForm(z,preset={}){
  const isNew=!z;
  const d=z?JSON.parse(JSON.stringify(z)):{id:uid(),furnId:preset.furnId||'',name:'',purpose:'',cats:preset.cat?[preset.cat]:[],tags:[],count:'',value:'',photos:[],note:'',checked:''};
- TMP={z:d,isNew,pend:null};
+ TMP={z:d,isNew,pend:null,cellRef:preset.cellIdx!=null?{fid:preset.furnId,idx:preset.cellIdx}:null};
  const its=isNew?[]:itemsInZone(d.id);
  const furnOpts=S.rooms.map(r=>`<optgroup label="${esc(r.name)}">`+S.furn.filter(f=>f.roomId===r.id).map(f=>`<option value="${f.id}"${f.id===d.furnId?' selected':''}>${esc(f.name)}</option>`).join('')+'</optgroup>').join('');
  modal(`<h2>${isNew?'＋ 新区域':'🗄️ '+esc(d.name)}</h2>
@@ -577,7 +597,7 @@ A.tab=el=>{tidy=el.dataset.v==='tidy'?tidy:tidy;setView(el.dataset.v)};
 A.closeModal=closeModal;
 A.clearQ=()=>{Q='';$('#q').value='';renderAll()};
 A.selRoom=el=>{SEL={t:'room',id:el.dataset.id};if(VIEW!=='home')setView('home');else renderAll();V3.focusRoom(el.dataset.id)};
-A.selFurn=el=>{SEL={t:'furn',id:el.dataset.id};if(VIEW!=='home')setView('home');else renderAll();V3.focusFurn(el.dataset.id)};
+A.selFurn=el=>{SEL={t:'furn',id:el.dataset.id};SELCELL=null;if(VIEW!=='home')setView('home');else renderAll();V3.focusFurn(el.dataset.id)};
 A.addItem=el=>{const p={};if(el.dataset.loc)p.loc=el.dataset.loc;if(el.dataset.zone)p.zoneId=el.dataset.zone;itemForm(null,p)};
 A.openItem=el=>itemForm(itemById(el.dataset.id));
 A.pickPhoto=()=>$('#fPhoto').click();
@@ -622,7 +642,7 @@ A.delSnap=el=>{TMP.z.photos.splice(+el.dataset.i,1);renderSnaps()};
 A.lb=el=>{const i=el.dataset.srcI;lightbox(i!=null?TMP.z.photos[+i].img:el.src)};
 A.saveZone=()=>{
  const d=collectZone();if(!d.name){alert('给区域起个名字');return}if(!d.furnId){alert('选一下在哪个家具里');return}
- if(TMP.isNew)S.zones.push(d);else{const i=S.zones.findIndex(z=>z.id===d.id);S.zones[i]=d;
+ if(TMP.isNew){S.zones.push(d);if(TMP.cellRef){const ff=furnById(TMP.cellRef.fid);if(ff&&ff.cells&&ff.cells[TMP.cellRef.idx])ff.cells[TMP.cellRef.idx].z=d.id}}else{const i=S.zones.findIndex(z=>z.id===d.id);S.zones[i]=d;
   S.items.filter(it=>it.zoneId===d.id).forEach(it=>it.furnId=d.furnId);}
  save();closeModal();renderAll();
 };
@@ -696,7 +716,9 @@ A.addRoom=()=>roomForm(null);
 A.editRoom=el=>roomForm(roomById(el.dataset.id));
 A.addFurn=()=>furnForm(null);
 A.editFurn=el=>furnForm(furnById(el.dataset.id));
-A.rotFurn=el=>{const f=furnById(el.dataset.id);[f.w,f.d]=[f.d,f.w];save();renderAll()};
+A.rotFurn=el=>{const f=furnById(el.dataset.id);[f.w,f.d]=[f.d,f.w];const o=['S','W','N','E'];f.face=o[(o.indexOf(faceOf(f))+1)%4];save();renderAll()};
+A.addZoneCell=el=>{zoneForm(null,{furnId:el.dataset.furn,cellIdx:+el.dataset.idx})};
+A.toggleCellBtn=el=>{V3.toggle(el.dataset.furn,+el.dataset.idx);renderSide()};
 A.batchOpen=()=>batchForm(SEL?.t==='furn'?SEL.id:S.furn[0]?.id);
 A.saveRoom=()=>{
  const g=n=>$(`[name=${n}]`,box).value,d=TMP.r;
@@ -919,15 +941,24 @@ A.copyLink=()=>{navigator.clipboard?.writeText(Sync.link()).then(()=>alert('已�
 
 /* ============ 3D ============ */
 const V3=(()=>{
- let R,scene,cam,ctl,grp,labels={},built=false,meshF={},meshR={},hl={furn:new Set()},goal=null;
+ let R,scene,cam,ctl,grp,labels={},furnG={},meshR={},picks=[],infos=[],lbs=[],groups=new Map(),hl={furn:new Set()},goal=null;
  const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),ground=new THREE.Plane(new THREE.Vector3(0,1,0),-0.06);
  let drag=null,down=null;
+ const imgCache=new Map();
+ const getImg=src=>{let im=imgCache.get(src);if(!im){im=new Image();im.src=src;imgCache.set(src,im)}return im};
+ function photoMesh(src,w,h){
+  const im=getImg(src),tex=new THREE.Texture(im);
+  const apply=()=>{const ia=im.naturalWidth/im.naturalHeight,ca=w/h;
+   if(ca>ia){tex.repeat.set(1,ia/ca);tex.offset.set(0,(1-ia/ca)/2)}else{tex.repeat.set(ca/ia,1);tex.offset.set((1-ca/ia)/2,0)}tex.needsUpdate=true};
+  if(im.complete&&im.naturalWidth)apply();else im.addEventListener('load',apply,{once:true});
+  return new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+ }
  function init(){
   const cv=$('#cv');
   R=new THREE.WebGLRenderer({canvas:cv,antialias:true});R.setPixelRatio(Math.min(2,devicePixelRatio));
   scene=new THREE.Scene();scene.background=new THREE.Color(0xe9eef2);
   cam=new THREE.PerspectiveCamera(42,1,.1,200);cam.position.set(0,13,10);
-  ctl=new THREE.OrbitControls(cam,cv);ctl.target.set(0,0,0.3);ctl.maxPolarAngle=1.5;ctl.minDistance=3;ctl.maxDistance=40;ctl.enableDamping=true;ctl.dampingFactor=.12;
+  ctl=new THREE.OrbitControls(cam,cv);ctl.target.set(0,0,0.3);ctl.maxPolarAngle=1.5;ctl.minDistance=1.2;ctl.maxDistance=40;ctl.enableDamping=true;ctl.dampingFactor=.12;
   scene.add(new THREE.HemisphereLight(0xffffff,0xb8c0c8,.85));
   const dl=new THREE.DirectionalLight(0xffffff,.65);dl.position.set(6,12,8);scene.add(dl);
   const g=new THREE.GridHelper(40,40,0xcdd5db,0xdbe1e6);g.position.y=-.01;scene.add(g);
@@ -940,10 +971,17 @@ const V3=(()=>{
    if(goal){ctl.target.lerp(goal.t,.14);cam.position.lerp(goal.p,.14);if(ctl.target.distanceTo(goal.t)<.02&&cam.position.distanceTo(goal.p)<.05)goal=null}
    ctl.update();
    const pulse=.35+.35*Math.sin(t/220);
-   for(const id in meshF){const m=meshF[id].material;const sel=SEL&&SEL.t==='furn'&&SEL.id===id;
-    if(hl.furn.has(id)){m.emissive.setHex(0xffa000);m.emissiveIntensity=.4+pulse}
-    else if(sel){m.emissive.setHex(0x2f7d6b);m.emissiveIntensity=.45}
-    else m.emissiveIntensity=0}
+   for(const id in furnG){const sel=SEL&&SEL.t==='furn'&&SEL.id===id;
+    furnG[id].mats.forEach(m=>{
+     if(hl.furn.has(id)){m.emissive.setHex(0xffa000);m.emissiveIntensity=.4+pulse}
+     else if(sel){m.emissive.setHex(0x2f7d6b);m.emissiveIntensity=.3}
+     else m.emissiveIntensity=0})}
+   lbs.forEach(l=>{l.visible=cam.position.distanceTo(l.position)>5});
+   infos.forEach(c=>{
+    const tg=c.open?1:0;if(Math.abs(tg-c.t)>.003){c.t+=(tg-c.t)*.2}else c.t=tg;
+    if(c.k==='door')c.pivot.rotation.y=(c.hinge==='L'?-1:1)*1.75*c.t;
+    else if(c.k==='drawer')c.slideG.position.z=c.slide*c.t;
+   });
    R.render(scene,cam)})(0);
  }
  function resize(){const s=$('#stage');if(!s||!R)return;const w=s.clientWidth,h=s.clientHeight;if(!w||!h)return;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
@@ -956,10 +994,99 @@ const V3=(()=>{
   const t=new THREE.CanvasTexture(c),s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthTest:false}));
   s.scale.set(c.width/190*scale,c.height/190*scale,1);s.renderOrder=10;labels[key]=s;return s.clone();
  }
+ /* ---- 一件家具 → 一组 3D 零件 ---- */
+ function buildFurn(f){
+  const face=faceOf(f),NS=face==='N'||face==='S',Wf=NS?f.w:f.d,Df=NS?f.d:f.w,H=f.h,zf=Df/2;
+  const g=new THREE.Group();g.position.set(f.x,.05,f.z);g.rotation.y=FACE_ROT[face];
+  const base=new THREE.MeshStandardMaterial({color:f.color,roughness:.75});
+  const panelM=new THREE.MeshStandardMaterial({color:new THREE.Color(f.color).multiplyScalar(1.07),roughness:.6});
+  const dark=new THREE.MeshStandardMaterial({color:0x2e2a26,roughness:1});
+  const handleM=new THREE.MeshStandardMaterial({color:0x3b3b3b,roughness:.4,metalness:.3});
+  const edgeM=new THREE.LineBasicMaterial({color:0x4a4036,transparent:true,opacity:.55});
+  const mats=[base,panelM],kind=f.kind||'cab';
+  const tag=(m,cell)=>{m.userData=cell==null?{furnId:f.id}:{furnId:f.id,cell};picks.push(m)};
+  const box=(w,h,d,m,x,y,z,pk=true)=>{const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);me.position.set(x,y,z);g.add(me);if(pk)tag(me);return me};
+  const edges=(mesh)=>{mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edgeM))};
+  /* 主体 */
+  if(kind==='bed'){
+   box(Wf,.18,Df,base,0,.14,0);                                  // 床架
+   box(Wf*.96,.2,Df*.96,new THREE.MeshStandardMaterial({color:0xf1efe9,roughness:.9}),0,.33,.02);  // 床垫
+   box(Wf,Math.max(.5,H+.1),.07,base,0,Math.max(.5,H+.1)/2,-zf+.035);   // 床头板
+   [-.22,.22].forEach(dx=>box(Wf*.3,.1,.32,new THREE.MeshStandardMaterial({color:0xffffff}),dx*Wf*1.2,.5,-zf+.35,false));
+  }else if(kind==='sofa'){
+   box(Wf,.38,Df,base,0,.19,0);box(Wf*.92,.14,Df*.7,panelM,0,.45,Df*.1);
+   box(Wf,.5,.22,base,0,.6,-zf+.12);box(.2,.52,Df,base,-Wf/2+.1,.45,0);box(.2,.52,Df,base,Wf/2-.1,.45,0);
+  }else if(kind==='table'||kind==='desk'){
+   box(Wf,.05,Df,panelM,0,H-.025,0);
+   [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sz])=>box(.06,H,.06,base,sx*(Wf/2-.06),H/2,sz*(Df/2-.06)));
+   if(kind==='desk'){box(.55,.34,.03,dark,0,H+.25,-zf+.2,false);box(.06,.18,.06,dark,0,H+.09,-zf+.2,false);box(.4,.01,.15,dark,0,H+.01,-zf+.5,false)}
+   else{[[-1,0],[1,0]].forEach(([sx])=>[-.5,.5].forEach(k=>box(.4,.4,.4,panelM,sx*(Wf/2+.28),.22,k*Df*.5,false)))}
+  }else if(kind==='fence'){
+   box(Wf,.03,Df,new THREE.MeshStandardMaterial({color:0xf0e4b8,roughness:1}),0,.02,0);
+   const fm=new THREE.MeshStandardMaterial({color:0xcfd3d6,transparent:true,opacity:.55});mats.push(fm);
+   box(Wf,H,.05,fm,0,H/2,-zf+.025);box(Wf,H,.05,fm,0,H/2,zf-.025);box(.05,H,Df,fm,-Wf/2+.025,H/2,0);box(.05,H,Df,fm,Wf/2-.025,H/2,0);
+  }else if(kind==='pile'){
+   [[0,0,.5,.6,.5,0xc9a37a],[.12,.5,.4,.4,.4,0xb87b5a],[-.18,.05,.3,.55,.35,0x9fb8c0],[.2,0.0,.25,.35,.3,0xd9d2bd]].forEach(([dx,y0,w,h,d,c],k)=>{
+    const m=box(w*Wf/.8,h,d*Df/.8,new THREE.MeshStandardMaterial({color:c,roughness:.8}),dx*Wf,y0+h/2,(k%2?.1:-.1)*Df);mats.push(m.material)});
+  }else{
+   box(Wf,H,Df,base,0,H/2,0);
+  }
+  /* 格子：门 / 抽屉 / 开放格 / 台面 */
+  const cells=f.cells||[],grpIdx=new Map();
+  cells.forEach((c,idx)=>{const k=c.z||c.g||('i'+idx);if(!grpIdx.has(k))grpIdx.set(k,[]);grpIdx.get(k).push(idx)});
+  cells.forEach((c,idx)=>{
+   const key=f.id+':'+idx,gap=.014,cw=(c.x1-c.x0)*Wf,ch=(c.y1-c.y0)*H,cx=((c.x0+c.x1)/2-.5)*Wf,cy=((c.y0+c.y1)/2)*H;
+   const info={key,k:c.k,open:openCells.has(key),t:openCells.has(key)?1:0,hinge:c.h||'L',slide:Math.min(Df*.75,.6),furnId:f.id,idx};
+   if(c.k==='top'){
+    const sl=new THREE.Mesh(new THREE.PlaneGeometry(Wf*.92,Df*.92),new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));
+    sl.rotation.x=-Math.PI/2;sl.position.set(0,H+.015,0);g.add(sl);tag(sl,idx);
+    const ring=new THREE.Mesh(new THREE.RingGeometry(Math.min(Wf,Df)*.18,Math.min(Wf,Df)*.22,24),new THREE.MeshBasicMaterial({color:0x2f7d6b,transparent:true,opacity:.55,side:THREE.DoubleSide}));
+    ring.rotation.x=-Math.PI/2;ring.position.set(0,H+.02,0);g.add(ring);
+   }else{
+    const rec=new THREE.Mesh(new THREE.PlaneGeometry(Math.max(.02,cw-gap*2),Math.max(.02,ch-gap*2)),dark);
+    rec.position.set(cx,cy,zf+.002);g.add(rec);
+    if(c.k==='open'){tag(rec,idx);rec.userData.cell=idx}
+    else if(c.k==='door'){
+     const hx=c.h==='R'?cx+cw/2-gap/2:cx-cw/2+gap/2;
+     const pivot=new THREE.Group();pivot.position.set(hx,cy,zf+.013);g.add(pivot);
+     const pm=new THREE.Mesh(new THREE.BoxGeometry(cw-gap,ch-gap,.025),panelM);
+     pm.position.set((c.h==='R'?-1:1)*(cw-gap)/2,0,0);pivot.add(pm);edges(pm);tag(pm,idx);
+     const hh=Math.min(.28,ch*.35);
+     const hd=new THREE.Mesh(new THREE.BoxGeometry(.018,hh,.03),handleM);
+     hd.position.set((c.h==='R'?-1:1)*(cw-gap-.06),0,.02);pivot.add(hd);
+     info.pivot=pivot;
+    }else if(c.k==='drawer'){
+     const sg=new THREE.Group();sg.position.set(cx,cy,zf+.015);g.add(sg);
+     const pm=new THREE.Mesh(new THREE.BoxGeometry(cw-gap,ch-gap,.03),panelM);sg.add(pm);edges(pm);tag(pm,idx);
+     const hd=new THREE.Mesh(new THREE.BoxGeometry(Math.min(.3,cw*.3),.02,.035),handleM);hd.position.set(0,ch*.12,.03);sg.add(hd);
+     info.slideG=sg;
+    }
+   }
+   infos.push(info);
+  });
+  /* 每组格子 → 一张照片（门/抽屉：藏在后面，打开才看见；开放格/台面：打开才出现） */
+  grpIdx.forEach((idxs,key)=>{
+   const zid=cells[idxs[0]].z,im=zid&&zonePhoto(zid);if(!im)return;
+   const cs=idxs.map(i=>cells[i]),x0=Math.min(...cs.map(c=>c.x0)),x1=Math.max(...cs.map(c=>c.x1)),y0=Math.min(...cs.map(c=>c.y0)),y1=Math.max(...cs.map(c=>c.y1));
+   const k0=cs[0].k,isTop=cs.every(c=>c.k==='top'),w=(x1-x0)*Wf-.03,h=(y1-y0)*H-.03;
+   let pm;
+   if(isTop){pm=photoMesh(im,.6,.6*1.78);pm.position.set(0,H+.35+.53,0)}
+   else{pm=photoMesh(im,Math.max(.1,w),Math.max(.1,h));pm.position.set(((x0+x1)/2-.5)*Wf,((y0+y1)/2)*H,zf+.005)}
+   g.add(pm);
+   const hidden=isTop||k0==='open';
+   const members=idxs.map(i=>infos.find(n=>n.furnId===f.id&&n.idx===i));
+   const upd=()=>{if(hidden)pm.visible=members.some(m=>m&&m.open)};
+   members.forEach(m=>{if(m)(m.photoUpd=m.photoUpd||[]).push(upd)});upd();
+  });
+  const nz=zonesInFurn(f.id).length,ni=itemsInFurn(f.id).filter(i=>!i.zoneId).length;
+  const sub=(nz?nz+'区':'')+(nz&&ni?' ':'')+(ni?ni+'件':'');
+  const lb=label(f.name+(sub?' · '+sub:''),{scale:.8});lb.position.set(f.x,.05+f.h+.28,f.z);
+  return {g,mats,lb,groupsMap:grpIdx};
+ }
  function rebuild(){
   if(!R)return;
   while(grp.children.length){const o=grp.children.pop();o.traverse?.(c=>{if(c.geometry)c.geometry.dispose()})}
-  meshF={};meshR={};
+  furnG={};meshR={};picks=[];infos=[];lbs=[];
   S.rooms.forEach(r=>{
    const fl=new THREE.Mesh(new THREE.BoxGeometry(r.w,.05,r.d),new THREE.MeshStandardMaterial({color:r.color,roughness:.9}));
    fl.position.set(r.cx,.025,r.cz);fl.userData={roomId:r.id};grp.add(fl);meshR[r.id]=fl;
@@ -979,20 +1106,23 @@ const V3=(()=>{
    });
    const lb=label(r.name,{scale:1.05,bg:'rgba(47,125,107,.92)',fg:'#fff'});lb.position.set(r.cx-r.w/2+.75,.95,r.cz-r.d/2+.35);grp.add(lb);
   });
-  S.furn.forEach(f=>{
-   const m=new THREE.Mesh(new THREE.BoxGeometry(f.w,f.h,f.d),new THREE.MeshStandardMaterial({color:f.color,roughness:.75}));
-   m.position.set(f.x,.05+f.h/2,f.z);m.userData={furnId:f.id};grp.add(m);meshF[f.id]=m;
-   const nz=zonesInFurn(f.id).length,ni=itemsInFurn(f.id).filter(i=>!i.zoneId).length;
-   const sub=(nz?nz+'区':'')+(nz&&ni?' ':'')+(ni?ni+'件':'');
-   const lb=label(f.name+(sub?' · '+sub:''),{scale:.8});lb.position.set(f.x,.05+f.h+.28,f.z);lb.userData.lbl=f.id;grp.add(lb);
-  });
-  built=true;
+  S.furn.forEach(f=>{const b=buildFurn(f);grp.add(b.g);grp.add(b.lb);lbs.push(b.lb);furnG[f.id]=b});
+ }
+ function groupOf(fid,idx){
+  const f=furnById(fid);if(!f||!f.cells)return [idx];
+  const c=f.cells[idx],k=c.z||c.g;if(!k)return [idx];
+  return f.cells.map((x,i)=>(x.z||x.g)===k?i:-1).filter(i=>i>=0);
+ }
+ function toggle(fid,idx){
+  const idxs=groupOf(fid,idx),key=fid+':'+idx,willOpen=!openCells.has(key);
+  idxs.forEach(i=>{const k=fid+':'+i;if(willOpen)openCells.add(k);else openCells.delete(k);
+   const inf=infos.find(n=>n.key===k);if(inf){inf.open=willOpen;(inf.photoUpd||[]).forEach(u=>u())}});
  }
  function pick(e){
   const rc=$('#cv').getBoundingClientRect();
   mouse.set((e.clientX-rc.left)/rc.width*2-1,-((e.clientY-rc.top)/rc.height)*2+1);ray.setFromCamera(mouse,cam);
-  const fh=ray.intersectObjects(Object.values(meshF))[0];
-  if(fh)return {t:'furn',id:fh.object.userData.furnId};
+  const fh=ray.intersectObjects(picks,false)[0];
+  if(fh)return {t:'furn',id:fh.object.userData.furnId,cell:fh.object.userData.cell};
   const rh=ray.intersectObjects(Object.values(meshR))[0];
   if(rh)return {t:'room',id:rh.object.userData.roomId,pt:rh.point};
   return null;
@@ -1012,7 +1142,7 @@ const V3=(()=>{
   if(down&&(Math.abs(e.clientX-down.x)+Math.abs(e.clientY-down.y))>5)down.moved=true;
   if(!drag)return;
   const p=planePt(e);if(!p)return;
-  if(drag.t==='furn'){const f=furnById(drag.id);f.x=snap(p.x+drag.ox);f.z=snap(p.z+drag.oz);const m=meshF[f.id];if(m)m.position.set(f.x,.05+f.h/2,f.z)}
+  if(drag.t==='furn'){const f=furnById(drag.id);f.x=snap(p.x+drag.ox);f.z=snap(p.z+drag.oz);const b=furnG[f.id];if(b){b.g.position.set(f.x,.05,f.z);b.lb.position.set(f.x,.05+f.h+.28,f.z)}}
   else{const r=roomById(drag.id),nx=snap(p.x+drag.ox),nz=snap(p.z+drag.oz),dx=nx-r.cx,dz=nz-r.cz;
    if(dx||dz){r.cx=nx;r.cz=nz;S.furn.filter(f=>f.roomId===r.id).forEach(f=>{f.x=+(f.x+dx).toFixed(3);f.z=+(f.z+dz).toFixed(3)});drag.moved=true;rebuild()}}
  }
@@ -1023,15 +1153,24 @@ const V3=(()=>{
    drag=null;ctl.enabled=true;save();rebuild();renderSide();renderHead();return;
   }
   if(down&&!down.moved&&e.target===$('#cv')){
-   const h=pick(e);
-   if(h){SEL=h.t==='furn'?{t:'furn',id:h.id}:{t:'room',id:h.id};if(h.t==='furn')focusFurn(h.id);else focusRoom(h.id)}
-   else SEL=null;
+   const h=pick(e),prev=SEL&&SEL.t==='furn'?SEL.id:null;
+   if(h&&h.t==='furn'){
+    SEL={t:'furn',id:h.id};
+    if(h.cell!=null&&!EDIT){SELCELL={fid:h.id,idx:h.cell};toggle(h.id,h.cell)}else SELCELL=null;
+    if(prev!==h.id)focusFurn(h.id);
+   }else if(h){SEL={t:'room',id:h.id};SELCELL=null;focusRoom(h.id)}
+   else{SEL=null;SELCELL=null}
    if(Q){Q='';$('#q').value='';hl={furn:new Set()}}
-   renderSide();rebuild();
+   renderSide();
   }
   down=null;
  }
- function focusFurn(id){const f=furnById(id);if(!f)return;const t=new THREE.Vector3(f.x,.5,f.z);goal={t,p:t.clone().add(new THREE.Vector3(0,6.2,6.6))}}
+ function focusFurn(id){
+  const f=furnById(id);if(!f)return;
+  const fv={S:[0,0,1],N:[0,0,-1],E:[1,0,0],W:[-1,0,0]}[faceOf(f)],t=new THREE.Vector3(f.x,Math.min(1,f.h*.5),f.z);
+  const dist=Math.max(3.4,Math.max(f.w,f.d)*1.9);
+  goal={t,p:new THREE.Vector3(f.x+fv[0]*dist,f.h*.5+dist*.55+.4,f.z+fv[2]*dist)};
+ }
  function focusRoom(id){const r=roomById(id);if(!r)return;const t=new THREE.Vector3(r.cx,0,r.cz),s=Math.max(r.w,r.d);goal={t,p:t.clone().add(new THREE.Vector3(0,s*1.3+3,s*.9+3.5))}}
  function preset(k){
   if(!S.rooms.length)return;
@@ -1039,7 +1178,7 @@ const V3=(()=>{
   const c=new THREE.Vector3((x0+x1)/2,0,(z0+z1)/2),span=Math.max(x1-x0,z1-z0);
   goal={t:c,p:k==='top'?c.clone().add(new THREE.Vector3(0,span*1.25+2,.01)):c.clone().add(new THREE.Vector3(0,span*.95+3,span*.8+3))};
  }
- return {init,resize,rebuild,focusFurn,focusRoom,preset,highlight:h=>{hl=h}};
+ return {init,resize,rebuild,focusFurn,focusRoom,preset,toggle,highlight:h=>{hl=h},get cam(){return cam},get ctl(){return ctl}};
 })();
 
 /* ============ 启动 ============ */
@@ -1054,6 +1193,6 @@ const V3=(()=>{
  Sync.init();
  renderToolbar();renderAll();V3.resize();V3.preset('iso');
  if(Sync.code){Sync.run();setInterval(()=>{if(!document.hidden)Sync.run()},45000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)Sync.run()})}
- window.JD={get S(){return S},renderAll,setView};
+ window.JD={get S(){return S},renderAll,setView,V3};
 })();
 })();
