@@ -138,9 +138,13 @@ h3{font-size:15px;margin:14px 0 6px}
 </main>
 <div id="modal"><div class="box" id="box"></div></div>
 <input type="file" id="importFile" accept=".json" style="display:none">
-<script src="vendor/three.min.js"></script>
-<script src="vendor/OrbitControls.js"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script>
+/* 每次打开都拿最新版的程序和配置（手机浏览器常缓存旧版）；三维库很大且不变，走缓存 */
+(function(){
+  var v=Date.now();
+  function L(src,bust,cb){var e=document.createElement('script');e.src=src+(bust?'?v='+v:'');e.onload=cb;e.onerror=function(){document.title='加载失败，请刷新'};document.body.appendChild(e)}
+  L('vendor/three.min.js',false,function(){L('vendor/OrbitControls.js',false,function(){L('config.js',true,function(){L('app.js',true)})})});
+})();
+</script>
 </body>
 </html>
