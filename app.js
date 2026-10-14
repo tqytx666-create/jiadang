@@ -964,9 +964,19 @@ const V3=(()=>{
    const fl=new THREE.Mesh(new THREE.BoxGeometry(r.w,.05,r.d),new THREE.MeshStandardMaterial({color:r.color,roughness:.9}));
    fl.position.set(r.cx,.025,r.cz);fl.userData={roomId:r.id};grp.add(fl);meshR[r.id]=fl;
    const wm=new THREE.MeshStandardMaterial({color:SEL&&SEL.t==='room'&&SEL.id===r.id?0x2f7d6b:0xfaf8f3,roughness:1,transparent:true,opacity:.92});
-   const t=.07,H=.45;
-   [[0,-r.d/2,r.w,t],[0,r.d/2,r.w,t],[-r.w/2,0,t,r.d],[r.w/2,0,t,r.d]].forEach(([dx,dz,w,d])=>{
-    const m=new THREE.Mesh(new THREE.BoxGeometry(w,H,d),wm);m.position.set(r.cx+dx,H/2,r.cz+dz);grp.add(m)});
+   const t=.07,H=.45,dm=new THREE.MeshStandardMaterial({color:0xb08a62,roughness:.8});
+   ['N','S','W','E'].forEach(side=>{
+    const horiz=side==='N'||side==='S',len=horiz?r.w:r.d;
+    const gaps=(r.doors||[]).filter(d=>d.s===side).map(d=>{const c=d.p*len;return [Math.max(0,c-d.w/2),Math.min(len,c+d.w/2)]}).sort((x,y)=>x[0]-y[0]);
+    let cur=0;const segs=[];
+    gaps.forEach(g=>{if(g[0]>cur+.02)segs.push([cur,g[0]]);cur=Math.max(cur,g[1])});
+    if(cur<len-.02)segs.push([cur,len]);
+    const put=(a,b,mat,h,th)=>{const l=b-a,mid=(a+b)/2;
+     const m=new THREE.Mesh(new THREE.BoxGeometry(horiz?l:th,h,horiz?th:l),mat);
+     m.position.set(horiz?r.cx-r.w/2+mid:r.cx+(side==='W'?-r.w/2:r.w/2),h/2,horiz?r.cz+(side==='N'?-r.d/2:r.d/2):r.cz-r.d/2+mid);grp.add(m)};
+    segs.forEach(([a,b])=>put(a,b,wm,H,t));
+    gaps.forEach(([a,b])=>put(a,b,dm,.04,t*1.8));
+   });
    const lb=label(r.name,{scale:1.05,bg:'rgba(47,125,107,.92)',fg:'#fff'});lb.position.set(r.cx-r.w/2+.75,.95,r.cz-r.d/2+.35);grp.add(lb);
   });
   S.furn.forEach(f=>{
