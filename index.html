@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f7d6b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="家当">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>家当 · 家里东西管家</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#2b2a28;--mut:#8a857b;--pri:#2f7d6b;--pri2:#e5f2ee;--warn:#d98a1c;--warn2:#fdf1dc;--bad:#c9473a;--bad2:#fbe4e1;--idle:#6f5fc0;--idle2:#ece8fa;--line:#e5e1d8;--r:12px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:9px;padding:6px 12px;color:var(--ink)}
+button:hover{border-color:var(--pri)}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.danger{color:var(--bad);border-color:#efc3be}
+button.big{padding:10px 16px;font-size:16px}
+input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:#fff;color:var(--ink);width:100%}
+textarea{resize:vertical}
+label{display:block;font-size:13px;color:var(--mut);margin:0 0 3px}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:19px;margin:0;white-space:nowrap}
+header h1 small{font-weight:400;color:var(--mut);font-size:12px;margin-left:6px}
+#q{max-width:340px;flex:1;min-width:150px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.chip{font-size:13px;padding:3px 10px;border-radius:99px;background:var(--pri2);color:var(--pri);white-space:nowrap}
+.chip.warn{background:var(--warn2);color:var(--warn)}.chip.bad{background:var(--bad2);color:var(--bad)}.chip.idle{background:var(--idle2);color:var(--idle)}
+nav{display:flex;gap:4px;padding:8px 16px 0;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:none;border-radius:9px 9px 0 0;padding:9px 14px;background:transparent;white-space:nowrap}
+nav button.on{background:var(--bg);font-weight:600;color:var(--pri)}
+#alerts{display:flex;gap:8px;flex-wrap:wrap;padding:8px 16px;background:#fffaf0;border-bottom:1px solid #f1e3c4}
+#alerts:empty{display:none}
+#alerts button{border-color:#ecd7a5;background:#fff8e6;font-size:13px;padding:3px 10px}
+body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+header,nav,#alerts{flex:none}
+main{flex:1;min-height:0;overflow:auto}
+.view{display:none;padding:16px;max-width:1100px;margin:0 auto}
+.view.on{display:block}
+#v-home{max-width:none;padding:0;height:100%}
+#v-home.on{display:grid;grid-template-columns:1fr 360px}
+#stage{position:relative;min-height:300px;background:#e9eef2}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.toolbar{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:2;max-width:calc(100% - 20px)}
+.toolbar button{background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.toolbar button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:#5b6a73;background:rgba(255,255,255,.8);padding:2px 8px;border-radius:6px}
+#side{background:var(--bg);border-left:1px solid var(--line);overflow:auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.item{display:flex;gap:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:8px;cursor:pointer;align-items:flex-start}
+.item:hover{border-color:var(--pri)}
+.thumb{width:56px;height:56px;border-radius:10px;background:var(--pri2);display:flex;align-items:center;justify-content:center;font-size:26px;flex:none;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.item .t{font-weight:600;line-height:1.3}
+.item .m{font-size:12.5px;color:var(--mut)}
+.tag{display:inline-block;font-size:12px;padding:0 7px;border-radius:6px;margin:3px 4px 0 0}
+.tag.warn{background:var(--warn2);color:var(--warn)}.tag.bad{background:var(--bad2);color:var(--bad)}.tag.idle{background:var(--idle2);color:var(--idle)}.tag.ok{background:var(--pri2);color:var(--pri)}
+h2{font-size:17px;margin:18px 0 8px}h2:first-child{margin-top:0}
+h3{font-size:15px;margin:14px 0 6px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:0 0 auto}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filters select{width:auto}
+.empty{color:var(--mut);text-align:center;padding:30px 10px}
+.sec{margin-bottom:6px;color:var(--mut);font-size:13px}
+#modal{position:fixed;inset:0;background:rgba(30,28,25,.45);display:none;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto;z-index:50}
+#modal.on{display:flex}
+.box{background:var(--bg);border-radius:16px;width:100%;max-width:640px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.box h2{margin-top:0}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form .full{grid-column:1/-1}
+.photos{display:flex;gap:10px}
+.photobox{width:110px;height:110px;border:1.5px dashed #c9c4b8;border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12.5px;color:var(--mut);cursor:pointer;overflow:hidden;background:#fff;position:relative}
+.photobox img{width:100%;height:100%;object-fit:cover}
+.adv{border-left:4px solid var(--pri);background:#fff;padding:10px 12px;border-radius:8px;margin:8px 0}
+.plat{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
+.plat b{display:block}
+.plat span{font-size:12.5px;color:var(--mut)}
+.big-card{text-align:center;padding:26px 16px}
+.big-card .thumb{width:120px;height:120px;margin:0 auto 12px;font-size:54px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.progress{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin:8px 0 14px}
+.progress i{display:block;height:100%;background:var(--pri)}
+.roomrow{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px}
+@media(max-width:820px){
+ header{padding:8px 12px;gap:6px 10px}
+ header h1{font-size:17px}header h1 small{display:none}
+ #q{max-width:none;min-width:0;flex:1}
+ .stats{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:2px}
+ #alerts{flex-wrap:nowrap;overflow-x:auto;padding:6px 12px}
+ #alerts button{white-space:nowrap}
+ nav{padding:4px 8px 0}nav button{padding:8px 10px}
+ .hint{display:none}
+ .toolbar button{padding:4px 8px;font-size:13px}
+ .view{padding:12px}
+ #side{padding:12px}
+ #v-home.on{grid-template-columns:1fr;grid-template-rows:55% 45%}
+ #side{border-left:none;border-top:1px solid var(--line)}
+ .form{grid-template-columns:1fr}
+ .stats{margin-left:0}
+}
+</style>
+</head>
+<body>
+<header id="hd">
+  <h1>🏠 家当<small>家里东西管家</small></h1>
+  <input id="q" placeholder="🔍 找东西：输入名字，回车在3D里定位">
+  <div class="stats" id="stats"></div>
+</header>
+<div id="alerts"></div>
+<nav id="tabs">
+  <button data-act="tab" data-v="home" class="on">🏠 3D 我的家</button>
+  <button data-act="tab" data-v="put">📍 该放哪</button>
+  <button data-act="tab" data-v="items">📦 全部物品</button>
+  <button data-act="tab" data-v="idle">💤 闲置处理</button>
+  <button data-act="tab" data-v="expire">⏰ 到期提醒</button>
+  <button data-act="tab" data-v="tidy">🧹 定期整理</button>
+  <button data-act="tab" data-v="set">⚙️ 设置</button>
+</nav>
+<main id="main">
+  <section class="view on" id="v-home">
+    <div id="stage">
+      <canvas id="cv"></canvas>
+      <div class="toolbar" id="tb"></div>
+      <div class="hint">左键拖=转视角 · 右键拖=平移 · 滚轮=缩放 · 点家具看里面的东西</div>
+    </div>
+    <aside id="side"></aside>
+  </section>
+  <section class="view" id="v-put"></section>
+  <section class="view" id="v-items"></section>
+  <section class="view" id="v-idle"></section>
+  <section class="view" id="v-expire"></section>
+  <section class="view" id="v-tidy"></section>
+  <section class="view" id="v-set"></section>
+</main>
+<div id="modal"><div class="box" id="box"></div></div>
+<input type="file" id="importFile" accept=".json" style="display:none">
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

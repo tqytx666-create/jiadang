@@ -1,0 +1,1 @@
+window.JD_CONFIG={"url": "https://oznaumvwecurqmfjqwne.supabase.co", "anon": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96bmF1bXZ3ZWN1cnFtZmpxd25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4OTE2NTEsImV4cCI6MjEwMjQ2NzY1MX0.bJfcVFpFspYdmwoeb_tDu77_IJsSfk8alJbtNrsJgPI", "pages": "https://tqytx666-create.github.io/jiadang/"};
