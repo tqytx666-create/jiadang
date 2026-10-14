@@ -884,7 +884,9 @@ const Sync={
     let merged;
     if(!base&&S.demo)merged=R.data;
     else merged=merge3(base?base.data:{rooms:[],furn:[],zones:[],items:[],roomTidy:{},tidyLog:[],settings:{}},L.data,R.data);
+    const before=S.rooms.map(r=>r.id).join();
     applyState(merged,Object.assign({},localImgMap(),R.imgs));changed=true;
+    if(before!==S.rooms.map(r=>r.id).join()){SEL=null;setTimeout(()=>V3.preset('iso'),50)}
     this.base={version:R.version,data:R.data};await DB.set('base',this.base);
     const M=serialize();
     if(canon(M.data)===canon(R.data))break;
